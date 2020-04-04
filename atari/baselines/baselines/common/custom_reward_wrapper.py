@@ -2,7 +2,7 @@ import gym
 import numpy as np
 from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.running_mean_std import RunningMeanStd
-from baselines.common.trex_utils import preprocess
+from baselines.common.trex_utils import preprocess, normalize_state
 #import matplotlib.pyplot as plt
 
 import torch
@@ -32,7 +32,7 @@ class AtariNet(nn.Module):
         x = F.leaky_relu(self.conv4(x))
         x = x.view(-1, 784)
         x = F.leaky_relu(self.fc1(x))
-        r = torch.sigmoid(self.fc2(x))
+        r = F.relu(self.fc2(x))  #changed from original T-REX sigmoid
         return r
 
 class VecPyTorchAtariReward(VecEnvWrapper):
@@ -50,10 +50,13 @@ class VecPyTorchAtariReward(VecEnvWrapper):
 
     def step_wait(self):
         obs, rews, news, infos = self.venv.step_wait()
-    
+
         #mask and normalize for input to network
-        normed_obs = preprocess(obs, self.env_name)
-    
+        if self.env_name == "pong":
+            normed_obs = normalize_state(obs)
+        else:
+            normed_obs = preprocess(obs, self.env_name)
+
         with torch.no_grad():
             rews_network = self.reward_net.forward(torch.from_numpy(np.array(normed_obs)).float().to(self.device)).cpu().numpy().squeeze()
 
@@ -62,7 +65,7 @@ class VecPyTorchAtariReward(VecEnvWrapper):
     def reset(self, **kwargs):
         obs = self.venv.reset()
 
-    
+
         return obs
 
 
