@@ -36,8 +36,11 @@ def LB_div(gt,r):
 	for i in range(len(r)):
 		# sorted scores, scores permuted acc to GT ranking (still non-differentiable)
 		penalty += (sorted_r[i] - r_permuted[i])*i
-	assert(penalty>-1e5)
-	return min(penalty,torch.tensor(0).float())
+	try:
+		assert(penalty>-1e5)
+	except:
+		print(r, sorted_r, penalty)
+	return max(penalty,torch.tensor(0).float())
 
 def generate_novice_demos(env, env_name, agent, model_dir, num_checkpoints):
 	# generate several rollouts for each of the 5 checkpoints
