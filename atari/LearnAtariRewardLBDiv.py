@@ -2,9 +2,7 @@ import argparse
 # coding: utf-8
 
 # Take length 50 snippets and record the cumulative return for each one. Then determine ground truth labels based on this.
-
 # In[1]:
-
 
 import pickle
 import gym
@@ -34,7 +32,7 @@ def LB_div(gt,r):
 	penalty = torch.tensor(0).float()
 	# iterate over trajectories
 	for i in range(len(r)):
-		# sorted scores, scores permuted acc to GT ranking (still non-differentiable)
+		# sorted scores, scores permuted acc to GT ranking 
 		penalty += (sorted_r[i] - r_permuted[i])*i
 	try:
 		assert(penalty>-1e5)
@@ -47,7 +45,7 @@ def generate_novice_demos(env, env_name, agent, model_dir, num_checkpoints):
 	if env_name == "breakout":
 		cpts = [1,125,350,500]#,800]
 	elif env_name == "pong":
-		cpts = [25,225,350,500]#,800]  #this will hopefully test the bregman divergence since trex will struggle since last demo is shorter than previous two
+		cpts = [1,25,100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400]#,800]  #this will hopefully test the bregman divergence since trex will struggle since last demo is shorter than previous two
 	elif env_name == "spaceinvaders":
 		cpts = [25,125,350,675]#,875]
 	else:
@@ -78,7 +76,7 @@ def generate_novice_demos(env, env_name, agent, model_dir, num_checkpoints):
 			model_path = model_dir + "/models/" + env_name + "_5/" + checkpoint
 
 		agent.load(model_path)
-		episode_count = 1
+		episode_count = 1 #1
 		for i in range(episode_count):
 			done = False
 			traj = []
@@ -199,8 +197,6 @@ class Net(nn.Module):
 		self.fc1 = nn.Linear(784, 64)
 		self.fc2 = nn.Linear(64, 1)
 
-
-
 	def cum_return(self, traj):
 		'''calculate cumulative return of trajectory'''
 		sum_rewards = 0
@@ -217,8 +213,6 @@ class Net(nn.Module):
 		sum_rewards += torch.sum(r)
 		sum_abs_rewards += torch.sum(torch.abs(r))
 		return sum_rewards, sum_abs_rewards
-
-
 
 	def forward(self, trajs):
 		'''compute cumulative return for each trajectory and return logits'''
@@ -240,7 +234,6 @@ def learn_reward(reward_network, optimizer, training_inputs, training_outputs, n
 	# Assume that we are on a CUDA machine, then this should print a CUDA device:
 	print(device)
 	# loss_criterion = nn.CrossEntropyLoss()
-
 	# use cpu for now
 	cum_loss = 0.0
 	training_data = list(zip(training_inputs, training_outputs))
@@ -256,18 +249,20 @@ def learn_reward(reward_network, optimizer, training_inputs, training_outputs, n
 			for k in range(num_cpts):
 				traj_k = training_obs[i][k]
 				traj_k = np.array(traj_k)
-				traj_k = torch.from_numpy(traj_k).float()
+				traj_k = torch.from_numpy(traj_k).float().to(device)
 				trajs.append(traj_k)
 			
 			#zero out gradient
 			optimizer.zero_grad()
 
 			#forward + backward + optimize
+			# print('trajs: ', trajs.is_cuda)
 			outputs, abs_rewards = reward_network.forward(trajs)
 			# outputs = outputs.unsqueeze(0)
-			# outputs = outputs.to(device)
+			outputs = outputs.to("cpu")
 
 			lb_div = LB_div(labels, outputs) # should be greater than or equal to 0
+			lb_div = lb_div.to(device)
 
 			loss = lb_div + l1_reg * abs_rewards  # LB divergence as loss
 			loss.backward()
@@ -285,8 +280,6 @@ def learn_reward(reward_network, optimizer, training_inputs, training_outputs, n
 				print("check pointing")
 				torch.save(reward_net.state_dict(), checkpoint_dir)
 	print("finished training")
-
-
 
 def calc_accuracy(reward_network, training_inputs, training_outputs):
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -310,8 +303,6 @@ def calc_accuracy(reward_network, training_inputs, training_outputs):
 				num_correct += 1.
 	return num_correct / len(training_inputs)
 
-
-
 def predict_reward_sequence(net, traj):
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 	rewards_from_obs = []
@@ -331,10 +322,10 @@ if __name__=="__main__":
 	parser.add_argument('--reward_model_path', default='', help="name and location for learned model params, e.g. ./learned_models/breakout.params")
 	parser.add_argument('--seed', default=0, help="random seed for experiments")
 	parser.add_argument('--models_dir', default = ".", help="path to directory that contains a models directory in which the checkpoint models for demos are stored")
-	parser.add_argument('--num_trajs', default = 0, type=int, help="number of downsampled full trajectories")
-	parser.add_argument('--num_snippets', default = 6000, type = int, help = "number of short subtrajectories to sample")
+	parser.add_argument('--num_trajs', default = 16, type=int, help="number of downsampled full trajectories")
+	parser.add_argument('--num_snippets', default = 0, type = int, help = "number of short subtrajectories to sample")
 	parser.add_argument('--num_epochs', default = 1, type = int, help = "number of times to run through training data")
-	parser.add_argument('--num_checkpoints', default = 4, type = int, help = "number of checkpoints to sample set of ranked trajectories")
+	parser.add_argument('--num_checkpoints', default = 16, type = int, help = "number of checkpoints to sample set of ranked trajectories")
 
 	args = parser.parse_args()
 	env_name = args.env_name
@@ -381,7 +372,6 @@ if __name__=="__main__":
 	agent = PPO2Agent(env, env_type, stochastic)
 
 	demonstrations, learning_returns, learning_rewards = generate_novice_demos(env, env_name, agent, args.models_dir, num_checkpoints)
-
 	#sort the demonstrations according to ground truth reward to simulate ranked demos
 
 	demo_lengths = [len(d) for d in demonstrations]
@@ -404,7 +394,7 @@ if __name__=="__main__":
 	# Now we create a reward network and optimize it using the training data.
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 	reward_net = Net()
-	# reward_net.to(device)
+	reward_net.to(device)
 	import torch.optim as optim
 	optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
 	learn_reward(reward_net, optimizer, training_obs, training_labels, num_iter, l1_reg, args.reward_model_path, num_checkpoints)
