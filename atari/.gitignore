@@ -1,0 +1,7 @@
+eval/*
+gym/*
+logs/*
+path_to_logs/*
+slurm_scripts/*
+baselines/path_to_logs/*
+gym/*
